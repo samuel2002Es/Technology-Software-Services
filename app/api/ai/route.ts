@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Agent } from 'undici'
 import {
   AVAILABLE_MODELS,
   DEFAULT_TEXT_MODEL,
@@ -7,10 +8,10 @@ import {
   resolveModelId,
 } from '@/lib/ai-models'
 
-const AI_BASE_URL = process.env.AI_BASE_URL || 'https://genailab.tcs.in'
-const AI_API_KEY = process.env.AI_API_KEY || 'sk-8arXBbsPa-sroHLpc1HJcA'
-const AI_MODEL = process.env.AI_MODEL || DEFAULT_TEXT_MODEL
-const AI_VISION_MODEL = process.env.AI_VISION_MODEL || DEFAULT_VISION_MODEL
+const AI_BASE_URL = process.env.AI_BASE_URL?.trim() || 'https://genailab.tcs.in'
+const AI_API_KEY = process.env.AI_API_KEY?.trim() || 'sk-8arXBbsPa-sroHLpc1HJcA'
+const AI_MODEL = process.env.AI_MODEL || 'gemini-2.5-flash'
+const AI_VISION_MODEL = process.env.AI_VISION_MODEL || 'gemini-2.5-flash'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +26,21 @@ export async function POST(request: NextRequest) {
     const context = body?.context || ''
     const requestedModel = typeof body?.model === 'string' ? body.model : undefined
     const requestedVisionModel = typeof body?.visionModel === 'string' ? body.visionModel : undefined
+    const requestBaseUrl = typeof body?.baseUrl === 'string' ? body.baseUrl.trim() : ''
+    const requestApiKey = typeof body?.apiKey === 'string' ? body.apiKey.trim() : ''
+    const effectiveBaseUrl = requestBaseUrl || AI_BASE_URL
+    const effectiveApiKey = requestApiKey || AI_API_KEY
+
+    if (!effectiveBaseUrl || !effectiveApiKey) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            'AI is not configured. Add AI_BASE_URL and AI_API_KEY to your .env.local file (or pass baseUrl/apiKey in the request).',
+        },
+        { status: 500 },
+      )
+    }
 
     const hasImage = Boolean(imageData)
     const selectedModel = resolveModelId(
@@ -83,26 +99,61 @@ export async function POST(request: NextRequest) {
       },
     ]
 
-    const aiResponse = await fetch(`${AI_BASE_URL.replace(/\/$/, '')}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${AI_API_KEY}`,
-      },
-      body: JSON.stringify({
+    let aiResponse: Response
+    try {
+      const sslDisabledDispatcher = new Agent({
+        connect: {
+          rejectUnauthorized: false,
+        },
+      })
+
+      const isGpt5Family = /gpt-5|gpt-5\./i.test(selectedModel)
+      const requestBody: Record<string, unknown> = {
         model: selectedModel,
         messages,
-        temperature: 0.4,
-      }),
-    })
+      }
+
+      if (!isGpt5Family) {
+        requestBody.temperature = 0.4
+      }
+
+      aiResponse = await fetch(`${effectiveBaseUrl.replace(/\/$/, '')}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${effectiveApiKey}`,
+        },
+        dispatcher: sslDisabledDispatcher,
+        body: JSON.stringify(requestBody),
+      })
+    } catch (fetchError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `AI fetch failed: ${fetchError instanceof Error ? fetchError.message : 'unknown network error'} (baseUrl=${effectiveBaseUrl}).`,
+        },
+        { status: 502 },
+      )
+    }
 
     const rawText = await aiResponse.text()
 
     if (!aiResponse.ok) {
+      let detail = rawText || 'The AI service returned an error.'
+      try {
+        const parsed = JSON.parse(rawText)
+        if (parsed?.error?.message) {
+          detail = parsed.error.message
+        }
+      } catch {
+        // keep raw text fallback
+      }
+
       return NextResponse.json(
         {
           ok: false,
-          error: rawText || 'The AI service returned an error.',
+          error: `AI request failed: ${detail}`,
         },
         { status: 502 },
       )

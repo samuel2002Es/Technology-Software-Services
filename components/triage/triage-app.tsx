@@ -2,6 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import {
   ArrowLeft,
   BarChart3,
   CheckCircle2,
@@ -12,6 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { AVAILABLE_MODELS, DEFAULT_TEXT_MODEL, DEFAULT_VISION_MODEL, resolveModelId } from '@/lib/ai-models'
 import { INCOMING_TICKETS, SEED_TICKETS } from '@/lib/tickets'
 import { formatElapsed } from '@/lib/time'
 import { TicketQueue } from './ticket-queue'
@@ -398,17 +408,6 @@ function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClo
     })
   }, [tickets])
 
-  const linePoints = useMemo(() => {
-    const max = Math.max(...daySeries.map((day) => day.count), 1)
-    return daySeries
-      .map((day, index) => {
-        const x = 28 + index * 54
-        const y = 116 - (day.count / max) * 72
-        return `${x},${y}`
-      })
-      .join(' ')
-  }, [daySeries])
-
   const totalTickets = tickets.length
   const highPriority = tickets.filter((ticket) => ticket.severity === 'High').length
   const avgResolution = Math.max(12, Math.round(totalTickets * 2.4))
@@ -497,55 +496,30 @@ function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClo
                 </button>
               </div>
 
-              <div className="mt-4 overflow-hidden rounded-xl border border-border bg-muted/15 p-3">
-                <svg viewBox="0 0 420 150" className="h-44 w-full" role="img" aria-label="Tickets received chart">
-                  <defs>
-                    <linearGradient id="fillTrend" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.24" />
-                      <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.02" />
-                    </linearGradient>
-                  </defs>
-
-                  {[0, 1, 2, 3].map((line) => (
-                    <line
-                      key={line}
-                      x1="0"
-                      x2="420"
-                      y1={24 + line * 30}
-                      y2={24 + line * 30}
-                      stroke="var(--border)"
-                      strokeWidth="1"
+              <div className="mt-4 h-56 overflow-hidden rounded-xl border border-border bg-muted/15 p-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={daySeries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="ticketTrendFill" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.04} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
+                    <Tooltip
+                      cursor={{ stroke: 'var(--primary)', strokeDasharray: '4 4' }}
+                      contentStyle={{
+                        backgroundColor: 'var(--card)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '12px',
+                        color: 'var(--foreground)',
+                      }}
                     />
-                  ))}
-
-                  <polyline
-                    points={`28,116 ${linePoints} 390,116`}
-                    fill="none"
-                    stroke="var(--primary)"
-                    strokeWidth="3"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-
-                  <polygon
-                    points={`28,116 ${linePoints} 390,116`}
-                    fill="url(#fillTrend)"
-                    opacity="1"
-                  />
-
-                  {daySeries.map((day, index) => {
-                    const x = 28 + index * 54
-                    const y = 116 - (day.count / Math.max(...daySeries.map((d) => d.count), 1)) * 72
-                    return (
-                      <g key={day.label}>
-                        <circle cx={x} cy={y} r="4.5" fill="var(--primary)" />
-                        <text x={x} y="138" textAnchor="middle" fontSize="9" fill="var(--muted-foreground)">
-                          {day.label.split(' ')[0]}
-                        </text>
-                      </g>
-                    )
-                  })}
-                </svg>
+                    <Area type="monotone" dataKey="count" stroke="var(--primary)" strokeWidth={3} fill="url(#ticketTrendFill)" />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
@@ -636,12 +610,24 @@ function NewTicketComposer({
   onCreate: (draft: NewTicketDraft) => void
 }) {
   const [draft, setDraft] = useState<NewTicketDraft>(EMPTY_DRAFT)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [aiInsight, setAiInsight] = useState('')
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_TEXT_MODEL)
 
   useEffect(() => {
     if (open) {
       setDraft(EMPTY_DRAFT)
+      setAiInsight('')
+      setIsAnalyzing(false)
+      setSelectedModel(DEFAULT_TEXT_MODEL)
     }
   }, [open])
+
+  useEffect(() => {
+    if (draft.screenshot && !AVAILABLE_MODELS.some((model) => model.id === selectedModel && model.supportsVision)) {
+      setSelectedModel(DEFAULT_VISION_MODEL)
+    }
+  }, [draft.screenshot, selectedModel])
 
   if (!open) return null
 
@@ -661,9 +647,53 @@ function NewTicketComposer({
     reader.readAsDataURL(file)
   }
 
+  async function handleAnalyzeWithAi() {
+    if (!draft.subject && !draft.description) return
+
+    setIsAnalyzing(true)
+    setAiInsight('')
+
+    try {
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'ticket-analysis',
+          model: resolveModelId(selectedModel, Boolean(draft.screenshot)),
+          visionModel: resolveModelId(selectedModel, true),
+          context: `Subject: ${draft.subject}\nCustomer: ${draft.customer || 'Unknown'}\nCompany: ${draft.company || 'Unknown'}\nSeverity: ${draft.severity}\nChannel: ${draft.channel}`,
+          prompt: `Analyze this support ticket and suggest a likely root cause, summary, and recommended actions. Use the provided description and the attached image if there is one.`,
+          imageData: draft.screenshot || undefined,
+          imageName: draft.screenshotName || undefined,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'AI analysis failed.')
+      }
+
+      setAiInsight(result.answer || 'No additional AI insights were returned.')
+      if (result.answer && draft.description.trim()) {
+        updateField(
+          'description',
+          `${draft.description}\n\n--- AI analysis ---\n${result.answer}`,
+        )
+      }
+    } catch (error) {
+      setAiInsight(
+        error instanceof Error ? `AI analysis error: ${error.message}` : 'AI analysis error: unable to process the request.',
+      )
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl shadow-foreground/10">
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl shadow-foreground/10">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
             <p className="text-[10px] font-medium tracking-[0.18em] uppercase text-muted-foreground">
@@ -681,7 +711,7 @@ function NewTicketComposer({
           </button>
         </div>
 
-        <div className="max-h-[75vh] overflow-y-auto app-scrollbar px-5 py-4">
+        <div className="flex-1 overflow-y-auto app-scrollbar px-5 py-4">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block text-sm">
               <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -751,6 +781,26 @@ function NewTicketComposer({
 
             <label className="block text-sm md:col-span-2">
               <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                AI model
+              </span>
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+              >
+                {(draft.screenshot
+                  ? AVAILABLE_MODELS.filter((model) => model.supportsVision)
+                  : AVAILABLE_MODELS.filter((model) => model.id !== 'azure/genailab-maas-text-embedding-3-large' && model.id !== 'azure/genailab-maas-whisper' && model.id !== 'azure/gpt-realtime-whisper'))
+                  .map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label} ({model.id})
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            <label className="block text-sm md:col-span-2">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Issue details
               </span>
               <textarea
@@ -792,22 +842,44 @@ function NewTicketComposer({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-border bg-muted/25 px-5 py-4">
+        {aiInsight && (
+          <div className="border-t border-border bg-muted/20 px-5 py-4">
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              AI insight
+            </p>
+            <div className="rounded-xl border border-border bg-card p-3 text-sm leading-relaxed text-foreground/85 whitespace-pre-line">
+              {aiInsight}
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/25 px-5 py-4">
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            onClick={handleAnalyzeWithAi}
+            disabled={isAnalyzing || (!draft.subject && !draft.description)}
+            className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Cancel
+            {isAnalyzing ? 'Analyzing...' : 'Analyze with AI'}
           </button>
-          <button
-            type="button"
-            onClick={() => onCreate(draft)}
-            disabled={!draft.subject || !draft.customer || !draft.company || !draft.description}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Create ticket
-          </button>
+
+          <div className="ml-auto flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onCreate(draft)}
+              disabled={!draft.subject || !draft.customer || !draft.company || !draft.description}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Create ticket
+            </button>
+          </div>
         </div>
       </div>
     </div>

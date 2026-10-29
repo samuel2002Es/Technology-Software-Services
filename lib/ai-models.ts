@@ -35,8 +35,8 @@ export const AVAILABLE_MODELS: AiModelOption[] = [
   { id: 'genailab-maas-Opus-4.6', label: 'Opus 4.6', category: 'vision', supportsVision: true },
 ]
 
-export const DEFAULT_TEXT_MODEL = 'gemini-2.5-flash'
-export const DEFAULT_VISION_MODEL = 'gemini-2.5-flash'
+export const DEFAULT_TEXT_MODEL = 'genailab-maas-gpt-4o'
+export const DEFAULT_VISION_MODEL = 'genailab-maas-gpt-4o'
 
 export function getModelLabel(modelId: string) {
   return AVAILABLE_MODELS.find((model) => model.id === modelId)?.label ?? modelId

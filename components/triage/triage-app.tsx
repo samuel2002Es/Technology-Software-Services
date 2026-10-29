@@ -61,6 +61,65 @@ const EMPTY_DRAFT: NewTicketDraft = {
 }
 
 function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClose: () => void }) {
+  const [dashboardSummary, setDashboardSummary] = useState('')
+  const [isAnalyzingDashboard, setIsAnalyzingDashboard] = useState(false)
+
+  async function handleAnalyzeDashboard() {
+    setIsAnalyzingDashboard(true)
+
+    try {
+      const trendSummary = Array.from({ length: 7 }, (_, index) => {
+        const today = new Date()
+        const date = new Date(today)
+        date.setDate(today.getDate() - (6 - index))
+        const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        const count = tickets.filter((ticket) => {
+          const created = new Date(ticket.createdAt)
+          return (
+            created.getFullYear() === date.getFullYear() &&
+            created.getMonth() === date.getMonth() &&
+            created.getDate() === date.getDate()
+          )
+        }).length
+
+        return `${label}: ${count} tickets`
+      }).join('; ')
+
+      const topIssues = tickets.slice(0, 5).map((ticket) => ({
+        id: ticket.id,
+        severity: ticket.severity,
+        customer: ticket.customer.company,
+        issue: ticket.subject,
+      }))
+
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'ticket-analysis',
+          model: 'genailab-maas-gpt-4o',
+          visionModel: 'genailab-maas-gpt-4o',
+          context: `Dashboard metrics: totalTickets=${tickets.length}; highPriority=${tickets.filter((ticket) => ticket.severity === 'High').length}; averageResolutionMinutes=${Math.max(12, Math.round(tickets.length * 2.4))}; trend=${trendSummary}; topIssues=${JSON.stringify(topIssues)}`,
+          prompt:
+            'Analyze this support dashboard. Summarize the main ticket trend, explain whether workload is increasing or stabilizing, highlight the most important issues, and provide a concise operational recommendation based on the current ticket details. Mention the ticket volume, priority mix, and likely follow-up actions.',
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result?.error || 'Dashboard AI analysis failed.')
+      }
+
+      setDashboardSummary(result.answer || 'No dashboard summary was returned.')
+    } catch (error) {
+      setDashboardSummary(
+        error instanceof Error ? `AI dashboard analysis error: ${error.message}` : 'AI dashboard analysis failed.',
+      )
+    } finally {
+      setIsAnalyzingDashboard(false)
+    }
+  }
+
   function handleDownloadPdf() {
     if (typeof window === 'undefined') return
 
@@ -426,6 +485,15 @@ function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClo
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={handleAnalyzeDashboard}
+              disabled={isAnalyzingDashboard}
+              className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            >
+              <BarChart3 className="size-3.5" aria-hidden="true" />
+              {isAnalyzingDashboard ? 'Analyzing...' : 'AI Summary'}
+            </button>
+            <button
+              type="button"
               onClick={handleDownloadPdf}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             >
@@ -478,6 +546,20 @@ function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClo
               </div>
             </div>
           </div>
+
+          {dashboardSummary && (
+            <div className="mt-5 rounded-2xl border border-border bg-background p-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold">AI dashboard summary</h3>
+                <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-primary">
+                  Trend insight
+                </span>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/25 p-3 text-sm leading-relaxed text-foreground/85 whitespace-pre-line">
+                {dashboardSummary}
+              </div>
+            </div>
+          )}
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[1.8fr_1fr]">
             <div className="rounded-2xl border border-border bg-background p-4">
@@ -1008,6 +1090,47 @@ export function TriageApp() {
     advanceFrom(ticket.id, updated)
   }
 
+  async function handleAnalyzeTicket(nextTicket: QueueTicket) {
+    const payload = {
+      mode: 'ticket-analysis',
+      model: 'genailab-maas-gpt-4o',
+      visionModel: 'genailab-maas-gpt-4o',
+      imageData: nextTicket.screenshot || undefined,
+      imageName: nextTicket.subject || 'screenshot.png',
+      context: `Ticket ID: ${nextTicket.id}\nSubject: ${nextTicket.subject}\nCustomer: ${nextTicket.customer.name}\nCompany: ${nextTicket.customer.company}\nSeverity: ${nextTicket.severity}\nChannel: ${nextTicket.channel}\nIssue description:\n${nextTicket.errorSummary || nextTicket.body}`,
+      prompt:
+        'Analyze the support issue using both the written ticket details and the attached screenshot if present. Extract the actual root cause, summarize the problem clearly, and draft a customer-ready response that acknowledges the issue and provides next steps.',
+    }
+
+    const response = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    const result = await response.json()
+    if (!response.ok) {
+      throw new Error(result?.error || 'AI analysis failed.')
+    }
+
+    const draftText = [
+      'Hi there,',
+      '',
+      'Thank you for reporting this issue.',
+      '',
+      result.answer || 'We are reviewing the details and will follow up with the next steps.',
+      '',
+      'We appreciate your patience while we investigate this with the information provided and the attached screenshot.',
+      '',
+      'Best regards,',
+      'Support Team',
+    ].join('\n')
+
+    setDrafts((prev) => ({ ...prev, [nextTicket.id]: draftText }))
+    setEditing(true)
+    return draftText
+  }
+
   function handleEdit() {
     setEditing((prev) => {
       if (!prev) requestAnimationFrame(() => textareaRef.current?.focus())
@@ -1078,7 +1201,7 @@ export function TriageApp() {
             className="flex animate-in flex-col gap-4 p-4 duration-300 fade-in slide-in-from-bottom-1 desk:h-full desk:flex-row desk:gap-3.5 desk:p-3.5 xl:gap-4 xl:p-4"
           >
             <div className="flex min-w-0 flex-col gap-4 desk:-mr-1 desk:min-h-0 desk:flex-1 desk:gap-3.5 desk:overflow-y-auto desk:pr-1 xl:gap-4">
-              <OriginalRequest ticket={ticket} className="shrink-0" />
+              <OriginalRequest ticket={ticket} className="shrink-0" onAnalyzeTicket={handleAnalyzeTicket} />
               <DraftEditor
                 className="shrink-0"
                 value={draft}

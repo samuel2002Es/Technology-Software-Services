@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Mail, ScanSearch } from 'lucide-react'
+import { Mail, ScanSearch, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AI_SIGNALS, type Signal, type SignalKind } from '@/lib/tickets'
 import { Panel } from './panel'
@@ -52,8 +52,17 @@ function renderHighlighted(text: string, signals: Signal[], enabled: boolean) {
   })
 }
 
-export function OriginalRequest({ ticket, className }: { ticket: QueueTicket; className?: string }) {
+export function OriginalRequest({
+  ticket,
+  className,
+  onAnalyzeTicket,
+}: {
+  ticket: QueueTicket
+  className?: string
+  onAnalyzeTicket?: (ticket: QueueTicket) => Promise<string>
+}) {
   const [showSignals, setShowSignals] = useState(true)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const signals = ticket.signals ?? AI_SIGNALS[ticket.id] ?? []
   const kinds = (['Product', 'Module', 'Severity', 'Context'] as const).filter((k) =>
     signals.some((s) => s.kind === k),
@@ -73,6 +82,25 @@ export function OriginalRequest({ ticket, className }: { ticket: QueueTicket; cl
       dense
       action={
         <div className="flex items-center gap-1.5">
+          {onAnalyzeTicket && (
+            <button
+              type="button"
+              disabled={isAnalyzing}
+              onClick={async () => {
+                if (!onAnalyzeTicket) return
+                setIsAnalyzing(true)
+                try {
+                  await onAnalyzeTicket(ticket)
+                } finally {
+                  setIsAnalyzing(false)
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <Sparkles className="size-3" aria-hidden="true" />
+              {isAnalyzing ? 'Analyzing...' : 'AI Analysis'}
+            </button>
+          )}
           {signals.length > 0 && (
             <button
               type="button"

@@ -10,8 +10,8 @@ import {
 
 const AI_BASE_URL = process.env.AI_BASE_URL?.trim() || 'https://genailab.tcs.in'
 const AI_API_KEY = process.env.AI_API_KEY?.trim() || 'sk-8arXBbsPa-sroHLpc1HJcA'
-const AI_MODEL = process.env.AI_MODEL || 'gemini-2.5-flash'
-const AI_VISION_MODEL = process.env.AI_VISION_MODEL || 'gemini-2.5-flash'
+const AI_MODEL = process.env.AI_MODEL || 'genailab-maas-gpt-4o'
+const AI_VISION_MODEL = process.env.AI_VISION_MODEL || 'genailab-maas-gpt-4o'
 
 export async function POST(request: NextRequest) {
   try {

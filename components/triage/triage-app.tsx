@@ -17,6 +17,8 @@ import {
   Clock,
   Download,
   ListFilter,
+  MessageSquareText,
+  Send,
   TriangleAlert,
   X,
 } from 'lucide-react'
@@ -58,6 +60,138 @@ const EMPTY_DRAFT: NewTicketDraft = {
   description: '',
   screenshot: '',
   screenshotName: '',
+}
+
+function HomeAssistant() {
+  const [open, setOpen] = useState(false)
+  const [input, setInput] = useState('')
+  const [isThinking, setIsThinking] = useState(false)
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      role: 'assistant' as const,
+      text:
+        'Hi! I can help you understand this support dashboard, create a ticket, review the queue, understand the AI summary, and use the app workflow step by step.',
+    },
+  ])
+
+  async function handleSendChat(event: any) {
+    event.preventDefault()
+
+    const trimmed = input.trim()
+    if (!trimmed || isThinking) return
+
+    const userMessage = { id: Date.now(), role: 'user' as const, text: trimmed }
+    setMessages((current) => [...current, userMessage])
+    setInput('')
+    setIsThinking(true)
+
+    try {
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'general',
+          model: 'genailab-maas-gpt-4o',
+          visionModel: 'genailab-maas-gpt-4o',
+          context:
+            'This is a support triage dashboard for customer support teams. The user needs help understanding how to use the app. Explain the queue, ticket status, AI summary, routing, ticket creation, and dashboard insights in a simple and practical way.',
+          prompt: `Help the user use this application. Their question is: ${trimmed}`,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result?.error || 'AI guidance request failed.')
+      }
+
+      const answer = result.answer || 'I can help with the dashboard workflow and ticket triage steps.'
+      setMessages((current) => [...current, { id: Date.now() + 1, role: 'assistant', text: answer }])
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'The AI assistant could not answer right now.'
+      setMessages((current) => [...current, { id: Date.now() + 2, role: 'assistant', text: message }])
+    } finally {
+      setIsThinking(false)
+    }
+  }
+
+  return (
+    <>
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/30 transition hover:scale-[1.02]"
+        >
+          <MessageSquareText className="h-4 w-4" />
+          AI helper
+        </button>
+      )}
+
+      {open && (
+        <div className="fixed bottom-5 right-5 z-50 w-[360px] overflow-hidden rounded-2xl border border-border bg-background shadow-2xl shadow-slate-900/10">
+          <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <MessageSquareText className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">AI Help</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Dashboard guide</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Close AI help"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex max-h-[380px] flex-col gap-3 overflow-y-auto bg-background p-3">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  'max-w-[86%] rounded-2xl px-3 py-2 text-sm leading-relaxed',
+                  message.role === 'assistant'
+                    ? 'bg-muted text-foreground'
+                    : 'ml-auto bg-primary text-primary-foreground',
+                )}
+              >
+                {message.text}
+              </div>
+            ))}
+            {isThinking && (
+              <div className="max-w-[86%] rounded-2xl bg-muted px-3 py-2 text-sm text-foreground/80">
+                Thinking...
+              </div>
+            )}
+          </div>
+
+          <form onSubmit={handleSendChat} className="flex items-center gap-2 border-t border-border bg-muted/20 p-3">
+            <input
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              placeholder="Ask how to use this app..."
+              className="h-10 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || isThinking}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Send message"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </form>
+        </div>
+      )}
+    </>
+  )
 }
 
 function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClose: () => void }) {
@@ -935,33 +1069,22 @@ function NewTicketComposer({
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/25 px-5 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-border bg-muted/25 px-5 py-4">
           <button
             type="button"
-            onClick={handleAnalyzeWithAi}
-            disabled={isAnalyzing || (!draft.subject && !draft.description)}
-            className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={onClose}
+            className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
           >
-            {isAnalyzing ? 'Analyzing...' : 'Analyze with AI'}
+            Cancel
           </button>
-
-          <div className="ml-auto flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => onCreate(draft)}
-              disabled={!draft.subject || !draft.customer || !draft.company || !draft.description}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Create ticket
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => onCreate(draft)}
+            disabled={!draft.subject || !draft.customer || !draft.company || !draft.description}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Create ticket
+          </button>
         </div>
       </div>
     </div>
@@ -1139,7 +1262,8 @@ export function TriageApp() {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="relative flex h-dvh overflow-hidden">
+      <HomeAssistant />
       <div
         className={cn(
           'h-full w-full shrink-0 desk:block desk:w-[264px] xl:w-[320px]',

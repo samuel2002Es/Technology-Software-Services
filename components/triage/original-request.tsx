@@ -129,6 +129,32 @@ export function OriginalRequest({ ticket, className }: { ticket: QueueTicket; cl
           {renderHighlighted(ticket.body, signals, showSignals)}
         </p>
       </div>
+
+      {(ticket.errorSummary || ticket.screenshot) && (
+        <div className="mt-3 space-y-3 rounded-xl border border-dashed border-border bg-muted/30 p-3">
+          {ticket.errorSummary && (
+            <div>
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Error summary
+              </p>
+              <p className="text-[12px] leading-relaxed text-foreground/85">{ticket.errorSummary}</p>
+            </div>
+          )}
+
+          {ticket.screenshot && (
+            <div>
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Screenshot
+              </p>
+              <img
+                src={ticket.screenshot}
+                alt="Captured error screenshot"
+                className="max-h-64 w-full rounded-lg border border-border object-contain bg-card"
+              />
+            </div>
+          )}
+        </div>
+      )}
     </Panel>
   )
 }

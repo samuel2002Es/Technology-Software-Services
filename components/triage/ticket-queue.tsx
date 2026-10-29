@@ -17,12 +17,16 @@ export function TicketQueue({
   newIds,
   now,
   onSelect,
+  onOpenInsights,
+  onCreateTicket,
 }: {
   tickets: QueueTicket[]
   selectedId: string
   newIds: Set<string>
   now: number
   onSelect: (id: string) => void
+  onOpenInsights?: () => void
+  onCreateTicket?: () => void
 }) {
   const [filter, setFilter] = useState<'All' | Severity>('All')
   const [query, setQuery] = useState('')
@@ -56,7 +60,7 @@ export function TicketQueue({
       className="flex h-full min-h-0 w-full flex-col border-r border-sidebar-border bg-sidebar"
     >
       <div className="px-4 pt-4 pb-3 xl:px-5">
-        <QueueKpis autoRouted={142 + counts.routed} />
+        <QueueKpis autoRouted={142 + counts.routed} onOpenInsights={onOpenInsights} />
       </div>
 
       <div className="px-4 pb-3 xl:px-5">
@@ -113,6 +117,16 @@ export function TicketQueue({
       </div>
 
       <div className="mx-4 h-px bg-sidebar-border xl:mx-5" />
+
+      <div className="px-3 pb-3 pt-2">
+        <button
+          type="button"
+          onClick={onCreateTicket}
+          className="w-full rounded-xl bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        >
+          + Create new ticket
+        </button>
+      </div>
 
       <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-3" aria-live="polite">
         {visible.length === 0 && (

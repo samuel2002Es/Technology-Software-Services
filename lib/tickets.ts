@@ -15,6 +15,8 @@ export type Ticket = {
   minutesAgo: number
   severity: Severity
   channel: 'Email' | 'Portal' | 'Chat'
+  screenshot?: string
+  errorSummary?: string
   customer: { name: string; company: string; plan: string }
   classification: {
     product: { value: string; confidence: number }

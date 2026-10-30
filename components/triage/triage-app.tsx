@@ -62,6 +62,185 @@ const EMPTY_DRAFT: NewTicketDraft = {
   screenshotName: '',
 }
 
+const AI_KB_LIBRARY = [
+  {
+    id: 'KB-2001',
+    title: 'SSO redirect loop after certificate rotation',
+    snippet: 'Troubleshooting guide for SAML and OAuth redirect loops caused by stale metadata, expired certificates, and missing IdP validation.',
+    keywords: ['sso', 'saml', 'oauth', 'login', 'redirect', 'certificate', 'metadata', 'auth', 'identity'],
+  },
+  {
+    id: 'KB-2002',
+    title: 'Diagnosing read replica lag after maintenance windows',
+    snippet: 'Checklist for replica lag, WAL spikes, and slow apply workers following maintenance or schema changes.',
+    keywords: ['replica', 'replication', 'lag', 'wal', 'database', 'primary', 'read', 'sql', 'stale'],
+  },
+  {
+    id: 'KB-2003',
+    title: 'Troubleshooting intermittent 401 webhook failures',
+    snippet: 'Common causes of OAuth token refresh races and 401 unauthorized responses for integrations and webhook calls.',
+    keywords: ['webhook', '401', 'unauthorized', 'integration', 'oauth', 'token', 'salesforce', 'api'],
+  },
+  {
+    id: 'KB-2004',
+    title: 'Billing invoice adjustment workflow for duplicate or incorrect charges',
+    snippet: 'Manual steps for reviewing invoices, identifying duplicate seat additions, and issuing credits for billing disputes.',
+    keywords: ['billing', 'invoice', 'seat', 'charge', 'credit', 'duplicate', 'chargeback', 'payment'],
+  },
+  {
+    id: 'KB-2005',
+    title: 'CSV export row limit and large dataset handling',
+    snippet: 'Recommendations for export limits, pagination, and large report generation problems on analytics and reporting features.',
+    keywords: ['csv', 'export', 'report', 'rows', 'analytics', 'dataset', 'large', 'download'],
+  },
+  {
+    id: 'KB-2006',
+    title: 'API rate limit and 429 handling across integrations',
+    snippet: 'Guidance for identifying API quotas, retry policy resets, and usage spikes behind 429 errors.',
+    keywords: ['api', '429', 'rate limit', 'quota', 'request', 'integration', 'limit', 'retry'],
+  },
+  {
+    id: 'KB-2007',
+    title: 'Solving schema migration failures and data drift',
+    snippet: 'Best practices for rollback plans, migration validation, and protecting compliance-sensitive data.',
+    keywords: ['schema', 'migration', 'database', 'rollback', 'data drift', 'table', 'compliance'],
+  },
+  {
+    id: 'KB-2008',
+    title: 'Platform performance degradation caused by query planner issues',
+    snippet: 'Root cause analysis for slow queries, planner regressions, and index-related latency spikes.',
+    keywords: ['performance', 'slow', 'latency', 'query planner', 'index', 'db', 'query', 'response'],
+  },
+  {
+    id: 'KB-2009',
+    title: 'Recommended steps for workspace rename and permission propagation',
+    snippet: 'Guide for workspace rename issues, stale references, and missing permission sync after organization-level changes.',
+    keywords: ['workspace', 'rename', 'permission', 'access', 'organization', 'workspace settings'],
+  },
+  {
+    id: 'KB-2010',
+    title: 'General support workflow for unclear bug reports and screenshots',
+    snippet: 'How to collect impacted user context, screen captures, and environment details for faster triage.',
+    keywords: ['bug', 'support', 'issue', 'ticket', 'error', 'screenshot', 'ui', 'general'],
+  },
+] as const
+
+function deriveAiTicketInsights(nextTicket: QueueTicket, aiText: string) {
+  const rawText = [
+    nextTicket.subject,
+    nextTicket.errorSummary || '',
+    nextTicket.body,
+    aiText,
+  ].join(' ')
+  const text = rawText.toLowerCase()
+
+  let product = 'General Support'
+  let module = 'Issue Triage'
+  let severity: QueueTicket['severity'] = nextTicket.severity
+  let destination = 'Tier 1 – General Support'
+  let reason = 'AI identified a general support issue requiring initial triage and manual review.'
+  let productConfidence = 0.72
+  let moduleConfidence = 0.7
+  let severityConfidence = 0.78
+
+  if (/(database|replica|replication|lag|wal|primary|query|sql|stale data)/.test(text)) {
+    product = 'Cloud Database'
+    module = 'Replication'
+    destination = 'Tier 2 – Database Team'
+    reason = 'The issue matches a database replication or stale-read problem that usually needs database engineering investigation.'
+    productConfidence = 0.94
+    moduleConfidence = 0.91
+  } else if (/(sso|saml|oauth|login|auth|identity|okta|redirect loop|signin)/.test(text)) {
+    product = 'Identity Platform'
+    module = 'SAML SSO'
+    destination = 'Tier 2 – Identity & Access'
+    reason = 'The issue resembles an authentication or SSO validation problem that can block access for multiple users.'
+    productConfidence = 0.95
+    moduleConfidence = 0.94
+  } else if (/(webhook|integration|oauth|401|unauthorized|salesforce|api|token)/.test(text)) {
+    product = 'Integrations Hub'
+    module = 'Webhooks'
+    destination = 'Tier 2 – Integrations Team'
+    reason = 'The issue matches a third-party API integration or webhook token problem affecting automated data flows.'
+    productConfidence = 0.92
+    moduleConfidence = 0.9
+  } else if (/(billing|invoice|charge|credit|seat|payment)/.test(text)) {
+    product = 'Billing Operations'
+    module = 'Invoice Review'
+    destination = 'Tier 2 – Billing Operations'
+    reason = 'The issue appears related to billing accuracy, invoice corrections, or subscription changes.'
+    productConfidence = 0.9
+    moduleConfidence = 0.87
+  } else if (/(export|csv|report|analytics|rows|dataset|large data)/.test(text)) {
+    product = 'Reporting & Analytics'
+    module = 'Export Pipeline'
+    destination = 'Tier 2 – Platform Engineering'
+    reason = 'The issue appears to be tied to reporting/export workflow and data processing limits.'
+    productConfidence = 0.88
+    moduleConfidence = 0.85
+  } else if (/(schema|migration|table|rollback|compliance|data drift)/.test(text)) {
+    product = 'Platform Data Services'
+    module = 'Schema Migration'
+    destination = 'Tier 3 – Platform Engineering'
+    reason = 'The issue resembles a migration or data integrity problem requiring platform engineering review.'
+    productConfidence = 0.9
+    moduleConfidence = 0.88
+  } else if (/(performance|slow|latency|query planner|index|timeout)/.test(text)) {
+    product = 'Application Performance'
+    module = 'Query Optimization'
+    destination = 'Tier 3 – Platform Engineering'
+    reason = 'The problem looks like a performance regression or query optimization issue.'
+    productConfidence = 0.86
+    moduleConfidence = 0.84
+  }
+
+  const normalizedSeverity = /(critical|outage|urgent|blocked|unavailable|down|failing)/.test(text)
+    ? 'High'
+    : nextTicket.severity
+  if (normalizedSeverity === 'High') {
+    severity = 'High'
+    severityConfidence = 0.92
+  } else if (normalizedSeverity === 'Medium') {
+    severity = 'Medium'
+    severityConfidence = 0.84
+  } else {
+    severity = 'Low'
+    severityConfidence = 0.76
+  }
+
+  const kbMatches = AI_KB_LIBRARY.map((article) => {
+    const articleText = `${article.title} ${article.snippet}`.toLowerCase()
+    let score = 0
+    article.keywords.forEach((keyword) => {
+      if (text.includes(keyword) || articleText.includes(keyword)) {
+        score += 1
+      }
+    })
+    if (text.includes(article.title.toLowerCase())) score += 2
+    const relevance = Math.min(0.97, Math.max(0.42, 0.52 + score * 0.12))
+    return { ...article, relevance }
+  })
+    .filter((article) => article.relevance >= 0.58)
+    .sort((a, b) => b.relevance - a.relevance)
+    .slice(0, 5)
+
+  const finalKb = kbMatches.length > 0 ? kbMatches : AI_KB_LIBRARY.slice(0, 4).map((article, index) => ({ ...article, relevance: 0.55 + index * 0.08 }))
+
+  return {
+    classification: {
+      product: { value: product, confidence: productConfidence },
+      module: { value: module, confidence: moduleConfidence },
+      severity: { value: severity, confidence: severityConfidence },
+    },
+    routing: {
+      destination,
+      reason,
+      confidence: Math.min(0.98, Math.max(0.72, productConfidence * 0.98)),
+    },
+    kb: finalKb,
+  }
+}
+
 function HomeAssistant() {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -122,7 +301,7 @@ function HomeAssistant() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/30 transition hover:scale-[1.02]"
+          className="fixed bottom-24 right-5 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/30 transition hover:scale-[1.02]"
         >
           <MessageSquareText className="h-4 w-4" />
           AI helper
@@ -1235,6 +1414,22 @@ export function TriageApp() {
     if (!response.ok) {
       throw new Error(result?.error || 'AI analysis failed.')
     }
+
+    const derived = deriveAiTicketInsights(nextTicket, result.answer || '')
+
+    setTickets((prev) =>
+      prev.map((ticket) =>
+        ticket.id === nextTicket.id
+          ? {
+              ...ticket,
+              classification: derived.classification,
+              routing: derived.routing,
+              kb: derived.kb,
+            }
+          : ticket,
+      ),
+    )
+    setRoutes((prev) => ({ ...prev, [nextTicket.id]: derived.routing.destination }))
 
     const draftText = [
       'Hi there,',

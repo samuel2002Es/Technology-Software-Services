@@ -1665,7 +1665,7 @@ export function TriageApp() {
                 aria-label="AI context"
                 className="flex min-w-0 flex-col gap-4 desk:-mr-1 desk:min-h-0 desk:w-[300px] desk:shrink-0 desk:gap-3.5 desk:overflow-y-auto desk:pr-1 xl:w-[360px] xl:gap-4"
               >
-                <KbReferences articles={ticket.kb} />
+                <KbReferences articles={ticket.kb} ticketId={ticket.id} />
               </aside>
             </div>
           )}

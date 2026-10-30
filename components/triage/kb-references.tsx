@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { ArrowUpRight, BookOpen, FileText, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowUpRight, BookOpen, FileText, Plus, Save, X } from 'lucide-react'
 import type { KbArticle } from '@/lib/tickets'
 import { Panel } from './panel'
 
@@ -106,12 +106,50 @@ const FULL_KB_LIBRARY: KbArticle[] = [
   },
 ]
 
-export function KbReferences({ articles }: { articles: KbArticle[] }) {
+export function KbReferences({ articles, ticketId }: { articles: KbArticle[]; ticketId?: string }) {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [viewAll, setViewAll] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
+  const [customArticles, setCustomArticles] = useState<KbArticle[]>([])
+  const [draft, setDraft] = useState({
+    title: '',
+    snippet: '',
+    recommendation: '',
+    relatedTicket: ticketId ?? 'TKT-NEW',
+  })
 
-  const libraryItems = viewAll ? FULL_KB_LIBRARY : articles
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = window.localStorage.getItem('support-kb-library')
+    if (!stored) return
+
+    try {
+      const parsed = JSON.parse(stored) as KbArticle[]
+      if (Array.isArray(parsed)) setCustomArticles(parsed)
+    } catch {
+      // ignore malformed saved data
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('support-kb-library', JSON.stringify(customArticles))
+  }, [customArticles])
+
+  const mergedArticles = useMemo(() => {
+    const unique = new Map<string, KbArticle>()
+
+    customArticles.forEach((article) => unique.set(article.id, article))
+    articles.forEach((article) => unique.set(article.id, article))
+    FULL_KB_LIBRARY.forEach((article) => {
+      if (!unique.has(article.id)) unique.set(article.id, article)
+    })
+
+    return Array.from(unique.values()).sort((a, b) => b.relevance - a.relevance)
+  }, [articles, customArticles])
+
+  const libraryItems = viewAll ? mergedArticles : articles.length > 0 ? articles : mergedArticles.slice(0, 5)
   const selectedArticle = libraryItems.find((article) => article.id === selectedId) ?? null
   const selectedRecommendation =
     selectedArticle?.recommendation ??
@@ -136,6 +174,35 @@ export function KbReferences({ articles }: { articles: KbArticle[] }) {
     setViewAll(false)
   }
 
+  const handlePublishKb = () => {
+    const title = draft.title.trim()
+    const snippet = draft.snippet.trim()
+    const recommendation = draft.recommendation.trim()
+
+    if (!title || !snippet || !recommendation) return
+
+    const newArticle: KbArticle = {
+      id: `KB-${Date.now()}`,
+      title,
+      snippet,
+      relevance: 0.93,
+      recommendation,
+      relatedTicket: draft.relatedTicket || ticketId || 'TKT-NEW',
+    }
+
+    setCustomArticles((prev) => [newArticle, ...prev])
+    setDraft({
+      title: '',
+      snippet: '',
+      recommendation: '',
+      relatedTicket: ticketId ?? 'TKT-NEW',
+    })
+    setPublishOpen(false)
+    setSelectedId(newArticle.id)
+    setViewAll(false)
+    setIsOpen(true)
+  }
+
   return (
     <>
       <div onClick={openKbLibrary} className="cursor-pointer">
@@ -145,16 +212,29 @@ export function KbReferences({ articles }: { articles: KbArticle[] }) {
           icon={BookOpen}
           dense
           action={
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                openKbLibrary()
-              }}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[10.5px] font-medium text-foreground hover:border-primary/40 hover:text-primary"
-            >
-              View all
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setPublishOpen(true)
+                }}
+                className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-[10.5px] font-medium text-primary hover:bg-primary/10"
+              >
+                <Plus className="size-3" aria-hidden="true" />
+                Publish new KB
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  openKbLibrary()
+                }}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[10.5px] font-medium text-foreground hover:border-primary/40 hover:text-primary"
+              >
+                View all
+              </button>
+            </div>
           }
         >
           <ul className="space-y-2">
@@ -197,6 +277,89 @@ export function KbReferences({ articles }: { articles: KbArticle[] }) {
           </ul>
         </Panel>
       </div>
+
+      {publishOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl border border-border bg-card p-5 shadow-2xl shadow-slate-900/20">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Knowledge base</p>
+                <h3 className="mt-1 text-lg font-semibold tracking-tight text-foreground">Publish new KB</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPublishOpen(false)}
+                className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Close KB form"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">KB title</label>
+                <input
+                  value={draft.title}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
+                  placeholder="Example: SAML redirect loop after certificate rotation"
+                  className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Summary</label>
+                <textarea
+                  value={draft.snippet}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, snippet: event.target.value }))}
+                  rows={4}
+                  placeholder="Describe the troubleshooting guidance or common resolution path."
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Recommended action</label>
+                <textarea
+                  value={draft.recommendation}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, recommendation: event.target.value }))}
+                  rows={4}
+                  placeholder="What should an agent do when this issue appears?"
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Related ticket</label>
+                <input
+                  value={draft.relatedTicket}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, relatedTicket: event.target.value }))}
+                  placeholder={ticketId ?? 'TKT-NEW'}
+                  className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPublishOpen(false)}
+                className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handlePublishKb}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-95"
+              >
+                <Save className="size-3.5" aria-hidden="true" />
+                Publish KB
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">

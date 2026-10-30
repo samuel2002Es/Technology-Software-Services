@@ -6,6 +6,8 @@ export type KbArticle = {
   title: string
   snippet: string
   relevance: number
+  recommendation?: string
+  relatedTicket?: string
 }
 
 export type Ticket = {

@@ -1,10 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CheckCircle2, Search, TriangleAlert } from 'lucide-react'
-import { QueueKpis } from './queue-kpis'
+import { CheckCircle2, ChevronDown, Search, Sparkles, TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { Severity } from '@/lib/tickets'
+import { ROUTING_OPTIONS, type Severity } from '@/lib/tickets'
 import { formatElapsed } from '@/lib/time'
 import { SeverityBadge } from './severity-badge'
 import type { QueueTicket } from './types'
@@ -16,17 +15,21 @@ export function TicketQueue({
   selectedId,
   newIds,
   now,
+  routeValue,
   onSelect,
   onOpenInsights,
   onCreateTicket,
+  onRouteChange,
 }: {
   tickets: QueueTicket[]
   selectedId: string
   newIds: Set<string>
   now: number
+  routeValue?: string
   onSelect: (id: string) => void
   onOpenInsights?: () => void
   onCreateTicket?: () => void
+  onRouteChange?: (value: string) => void
 }) {
   const [filter, setFilter] = useState<'All' | Severity>('All')
   const [query, setQuery] = useState('')
@@ -54,16 +57,18 @@ export function TicketQueue({
     )
   }, [tickets, filter, query])
 
+  const selectedTicket = useMemo(
+    () => tickets.find((t) => t.id === selectedId) ?? tickets[0],
+    [tickets, selectedId],
+  )
+  const selectedRoute = routeValue ?? selectedTicket?.routing?.destination ?? 'Tier 1 – General Support'
+
   return (
     <aside
       aria-label="Ticket queue"
       className="flex h-full min-h-0 w-full flex-col border-r border-sidebar-border bg-sidebar"
     >
-      <div className="px-4 pt-4 pb-3 xl:px-5">
-        <QueueKpis autoRouted={142 + counts.routed} onOpenInsights={onOpenInsights} />
-      </div>
-
-      <div className="px-4 pb-3 xl:px-5">
+      <div className="px-4 pb-3 pt-4 xl:px-5">
         <div className="flex items-center justify-between">
           <h2 className="text-[13px] font-semibold tracking-tight">Ticket Queue</h2>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-severity-low/10 px-2 py-0.5 text-[11px] font-medium text-severity-low">
@@ -77,6 +82,56 @@ export function TicketQueue({
         <p className="mt-0.5 text-xs text-muted-foreground">
           {counts.All} open · {counts.High} high priority
         </p>
+
+        {selectedTicket && (
+          <div className="mt-3 rounded-[14px] border border-border bg-gradient-to-br from-primary/10 to-primary/[0.03] p-3.5 ring-1 ring-primary/15 ring-inset">
+            <div className="flex items-start justify-between gap-3">
+              <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.16em] text-primary uppercase">
+                <Sparkles className="size-3.5" aria-hidden="true" />
+                AI suggested
+              </div>
+              <span className="font-mono text-[10px] font-medium text-primary/80 tabular-nums">
+                {Math.round((selectedTicket.routing?.confidence ?? 0.9) * 100)}% conf.
+              </span>
+            </div>
+
+            <div className="mt-3">
+              <p className="text-[18px] font-bold leading-snug tracking-tight text-foreground">
+                {selectedTicket.routing?.destination || 'Tier 1 – General Support'}
+              </p>
+              <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
+                {selectedTicket.routing?.reason || 'AI recommendation based on the selected ticket context.'}
+              </p>
+            </div>
+
+            <div className="mt-4">
+              <label
+                htmlFor="home-routing-override"
+                className="block text-[10px] font-semibold tracking-[0.16em] text-foreground uppercase"
+              >
+                Route to
+              </label>
+              <div className="relative mt-2">
+                <select
+                  id="home-routing-override"
+                  value={selectedRoute}
+                  onChange={(e) => onRouteChange?.(e.target.value)}
+                  className="h-11 w-full appearance-none rounded-xl border-2 border-primary/60 bg-card pr-10 pl-3 text-[13px] font-medium text-foreground shadow-xs transition-shadow outline-none hover:border-primary focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/25"
+                >
+                  {ROUTING_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-primary"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <label className="relative mt-3 block">
           <span className="sr-only">Search tickets</span>

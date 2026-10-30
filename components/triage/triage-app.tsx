@@ -373,7 +373,15 @@ function HomeAssistant() {
   )
 }
 
-function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClose: () => void }) {
+function AIImpactDashboard({
+  tickets,
+  onClose,
+  embedded = false,
+}: {
+  tickets: QueueTicket[]
+  onClose: () => void
+  embedded?: boolean
+}) {
   const [dashboardSummary, setDashboardSummary] = useState('')
   const [isAnalyzingDashboard, setIsAnalyzingDashboard] = useState(false)
 
@@ -784,10 +792,36 @@ function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClo
   const highPriority = tickets.filter((ticket) => ticket.severity === 'High').length
   const avgResolution = Math.max(12, Math.round(totalTickets * 2.4))
   const topIssues = [...tickets].slice(0, 5)
+  const routingSummary = Object.entries(
+    tickets.reduce<Record<string, number>>((acc, ticket) => {
+      const destination = ticket.routing?.destination || 'Tier 1 – General Support'
+      acc[destination] = (acc[destination] || 0) + 1
+      return acc
+    }, {}),
+  )
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 4)
+    .map(([team, count]) => ({
+      team,
+      count,
+      share: Math.round((count / Math.max(totalTickets, 1)) * 100),
+    }))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/65 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-border bg-card shadow-2xl shadow-foreground/10">
+    <div
+      className={
+        embedded
+          ? 'h-full w-full overflow-hidden rounded-2xl border border-border bg-card shadow-sm'
+          : 'fixed inset-0 z-50 flex items-center justify-center bg-background/65 p-4 backdrop-blur-sm'
+      }
+    >
+      <div
+        className={
+          embedded
+            ? 'h-full w-full overflow-hidden'
+            : 'max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-border bg-card shadow-2xl shadow-foreground/10'
+        }
+      >
         <div className="flex items-center justify-between border-b border-border bg-background/60 px-5 py-4">
           <div>
             <p className="text-[10px] font-medium tracking-[0.18em] uppercase text-muted-foreground">
@@ -813,22 +847,24 @@ function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClo
               <Download className="size-3.5" aria-hidden="true" />
               Download PDF
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              aria-label="Close dashboard"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
+            {!embedded && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                aria-label="Close dashboard"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="app-scrollbar max-h-[calc(90vh-80px)] overflow-y-auto p-5">
+        <div className={embedded ? 'app-scrollbar h-[calc(100%-77px)] overflow-y-auto p-5' : 'app-scrollbar max-h-[calc(90vh-80px)] overflow-y-auto p-5'}>
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-xl border border-border bg-muted/40 p-4">
+            <div className="rounded-2xl border border-border bg-gradient-to-br from-card to-muted/20 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tickets received</p>
-              <div className="mt-2 flex items-end justify-between gap-2">
+              <div className="mt-3 flex items-end justify-between gap-2">
                 <span className="text-3xl font-semibold tracking-tight tabular-nums">{totalTickets}</span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-severity-low/10 px-2 py-1 text-[11px] font-medium text-severity-low">
                   <CheckCircle2 className="size-3" aria-hidden="true" />
@@ -837,9 +873,9 @@ function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClo
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-muted/40 p-4">
+            <div className="rounded-2xl border border-border bg-gradient-to-br from-card to-muted/20 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">High priority</p>
-              <div className="mt-2 flex items-end justify-between gap-2">
+              <div className="mt-3 flex items-end justify-between gap-2">
                 <span className="text-3xl font-semibold tracking-tight tabular-nums">{highPriority}</span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-severity-high/10 px-2 py-1 text-[11px] font-medium text-severity-high">
                   <TriangleAlert className="size-3" aria-hidden="true" />
@@ -848,9 +884,9 @@ function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClo
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-muted/40 p-4">
+            <div className="rounded-2xl border border-border bg-gradient-to-br from-card to-muted/20 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">AI time saved</p>
-              <div className="mt-2 flex items-end justify-between gap-2">
+              <div className="mt-3 flex items-end justify-between gap-2">
                 <span className="text-3xl font-semibold tracking-tight tabular-nums">12h</span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
                   <BarChart3 className="size-3" aria-hidden="true" />
@@ -861,18 +897,41 @@ function AIImpactDashboard({ tickets, onClose }: { tickets: QueueTicket[]; onClo
           </div>
 
           {dashboardSummary && (
-            <div className="mt-5 rounded-2xl border border-border bg-background p-4">
+            <div className="mt-5 rounded-2xl border border-border bg-gradient-to-br from-background to-muted/10 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h3 className="text-sm font-semibold">AI dashboard summary</h3>
                 <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-primary">
                   Trend insight
                 </span>
               </div>
-              <div className="rounded-xl border border-border bg-muted/25 p-3 text-sm leading-relaxed text-foreground/85 whitespace-pre-line">
+              <div className="rounded-xl border border-border bg-card/80 p-3 text-sm leading-relaxed text-foreground/85 whitespace-pre-line">
                 {dashboardSummary}
               </div>
             </div>
           )}
+
+          <div className="mt-5 rounded-2xl border border-border bg-background p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">AI suggested routing by team</h3>
+              <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-primary">
+                Auto-suggested
+              </span>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {routingSummary.map((item) => (
+                <div key={item.team} className="rounded-xl border border-border bg-muted/25 p-3">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{item.team}</p>
+                  <div className="mt-2 flex items-end justify-between gap-2">
+                    <span className="text-2xl font-semibold tracking-tight tabular-nums">{item.count}</span>
+                    <span className="text-[11px] font-medium text-primary">{item.share}%</span>
+                  </div>
+                  <div className="mt-2 h-1.5 rounded-full bg-muted">
+                    <div className="h-1.5 rounded-full bg-primary" style={{ width: `${item.share}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[1.8fr_1fr]">
             <div className="rounded-2xl border border-border bg-background p-4">
@@ -1281,8 +1340,8 @@ export function TriageApp() {
   const [routes, setRoutes] = useState<Record<string, string>>({})
   const [reviewed, setReviewed] = useState<Record<string, boolean>>({})
   const [editing, setEditing] = useState(false)
+  const [detailTab, setDetailTab] = useState<'overview' | 'dashboard' | 'insights'>('overview')
   const [mobileView, setMobileView] = useState<'queue' | 'detail'>('queue')
-  const [insightsOpen, setInsightsOpen] = useState(false)
   const [createTicketOpen, setCreateTicketOpen] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -1310,6 +1369,24 @@ export function TriageApp() {
   const route = routes[ticket.id] ?? ticket.routing.destination
   const isReviewed = reviewed[ticket.id] ?? false
   const closed = ticket.status !== 'open'
+  const dashboardTrend = useMemo(() => {
+    const today = new Date()
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(today)
+      date.setDate(today.getDate() - (6 - index))
+      const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      const count = tickets.filter((item) => {
+        const created = new Date(item.createdAt)
+        return (
+          created.getFullYear() === date.getFullYear() &&
+          created.getMonth() === date.getMonth() &&
+          created.getDate() === date.getDate()
+        )
+      }).length
+
+      return { label, count }
+    })
+  }, [tickets])
 
   function showToast(message: string, tone: Toast['tone']) {
     clearTimeout(toastTimer.current)
@@ -1319,6 +1396,7 @@ export function TriageApp() {
 
   function selectTicket(id: string) {
     setSelectedId(id)
+    setDetailTab('overview')
     setEditing(false)
     setMobileView('detail')
     setNewIds((prev) => {
@@ -1470,13 +1548,17 @@ export function TriageApp() {
           selectedId={ticket.id}
           newIds={newIds}
           now={now}
+          routeValue={route}
           onSelect={selectTicket}
-          onOpenInsights={() => setInsightsOpen(true)}
+          onOpenInsights={() => {
+            setMobileView('detail')
+            setDetailTab('dashboard')
+          }}
           onCreateTicket={() => setCreateTicketOpen(true)}
+          onRouteChange={(value) => setRoutes((prev) => ({ ...prev, [ticket.id]: value }))}
         />
       </div>
 
-      {insightsOpen && <AIImpactDashboard tickets={tickets} onClose={() => setInsightsOpen(false)} />}
       <NewTicketComposer open={createTicketOpen} onClose={() => setCreateTicketOpen(false)} onCreate={handleCreateTicket} />
 
       <main
@@ -1514,40 +1596,79 @@ export function TriageApp() {
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto desk:overflow-hidden">
-          <div
-            key={ticket.id}
-            className="flex animate-in flex-col gap-4 p-4 duration-300 fade-in slide-in-from-bottom-1 desk:h-full desk:flex-row desk:gap-3.5 desk:p-3.5 xl:gap-4 xl:p-4"
-          >
-            <div className="flex min-w-0 flex-col gap-4 desk:-mr-1 desk:min-h-0 desk:flex-1 desk:gap-3.5 desk:overflow-y-auto desk:pr-1 xl:gap-4">
-              <OriginalRequest ticket={ticket} className="shrink-0" onAnalyzeTicket={handleAnalyzeTicket} />
-              <DraftEditor
-                className="shrink-0"
-                value={draft}
-                original={ticket.draft}
-                editing={editing && !closed}
-                reviewed={isReviewed}
-                disabled={closed}
-                textareaRef={textareaRef}
-                onChange={(v) => setDrafts((d) => ({ ...d, [ticket.id]: v }))}
-                onReviewedChange={(v) => setReviewed((r) => ({ ...r, [ticket.id]: v }))}
-                onToggleEdit={handleEdit}
-              />
-            </div>
-            <aside
-              aria-label="AI context"
-              className="flex min-w-0 flex-col gap-4 desk:-mr-1 desk:min-h-0 desk:w-[300px] desk:shrink-0 desk:gap-3.5 desk:overflow-y-auto desk:pr-1 xl:w-[360px] xl:gap-4"
-            >
-              <ClassificationPanel classification={ticket.classification} />
-              <RoutingPanel
-                routing={ticket.routing}
-                value={route}
-                disabled={closed}
-                onChange={(v) => setRoutes((r) => ({ ...r, [ticket.id]: v }))}
-              />
-              <KbReferences articles={ticket.kb} />
-            </aside>
+        <div className="border-b border-border/80 bg-card/60 px-4 py-3">
+          <div className="inline-flex rounded-xl border border-border bg-muted/30 p-1">
+            {[
+              { key: 'overview', label: 'Overview' },
+              { key: 'dashboard', label: 'Dashboard' },
+              { key: 'insights', label: 'AI Insights' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setDetailTab(tab.key as 'overview' | 'dashboard' | 'insights')}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                  detailTab === tab.key
+                    ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto desk:overflow-hidden">
+          {detailTab === 'overview' ? (
+            <div
+              key={ticket.id}
+              className="flex animate-in flex-col gap-4 p-4 duration-300 fade-in slide-in-from-bottom-1 desk:h-full desk:flex-row desk:gap-3.5 desk:p-3.5 xl:gap-4 xl:p-4"
+            >
+              <div className="flex min-w-0 flex-col gap-4 desk:-mr-1 desk:min-h-0 desk:flex-1 desk:gap-3.5 desk:overflow-y-auto desk:pr-1 xl:gap-4">
+                <OriginalRequest ticket={ticket} className="shrink-0" onAnalyzeTicket={handleAnalyzeTicket} />
+                <DraftEditor
+                  className="shrink-0"
+                  value={draft}
+                  original={ticket.draft}
+                  editing={editing && !closed}
+                  reviewed={isReviewed}
+                  disabled={closed}
+                  textareaRef={textareaRef}
+                  onChange={(v) => setDrafts((d) => ({ ...d, [ticket.id]: v }))}
+                  onReviewedChange={(v) => setReviewed((r) => ({ ...r, [ticket.id]: v }))}
+                  onToggleEdit={handleEdit}
+                />
+              </div>
+            </div>
+          ) : detailTab === 'dashboard' ? (
+            <div className="h-full p-4">
+              <AIImpactDashboard tickets={tickets} onClose={() => setDetailTab('overview')} embedded />
+            </div>
+          ) : (
+            <div
+              key={`${ticket.id}-insights`}
+              className="flex animate-in flex-col gap-4 p-4 duration-300 fade-in slide-in-from-bottom-1 desk:h-full desk:flex-row desk:gap-3.5 desk:p-3.5 xl:gap-4 xl:p-4"
+            >
+              <div className="flex min-w-0 flex-col gap-4 desk:-mr-1 desk:min-h-0 desk:flex-1 desk:gap-3.5 desk:overflow-y-auto desk:pr-1 xl:gap-4">
+                <ClassificationPanel classification={ticket.classification} />
+                <RoutingPanel
+                  routing={ticket.routing}
+                  value={route}
+                  disabled={closed}
+                  onChange={(v) => setRoutes((r) => ({ ...r, [ticket.id]: v }))}
+                />
+              </div>
+
+              <aside
+                aria-label="AI context"
+                className="flex min-w-0 flex-col gap-4 desk:-mr-1 desk:min-h-0 desk:w-[300px] desk:shrink-0 desk:gap-3.5 desk:overflow-y-auto desk:pr-1 xl:w-[360px] xl:gap-4"
+              >
+                <KbReferences articles={ticket.kb} />
+              </aside>
+            </div>
+          )}
         </div>
 
         <ActionBar

@@ -10,6 +10,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'Troubleshooting guide for SAML and OAuth login loops caused by stale IdP metadata, expired certificates, or missing validation after rotation.',
     relevance: 0.96,
+    recommendation:
+      'Re-validate IdP metadata, confirm the new certificate is active, and verify the logout/login redirect chain before escalating to identity engineering.',
+    relatedTicket: 'TCK-48209',
   },
   {
     id: 'KB-1002',
@@ -17,6 +20,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'Checklist for diagnosing WAL spikes, replica apply delays, and stale customer-facing data after maintenance or background jobs.',
     relevance: 0.95,
+    recommendation:
+      'Check WAL growth, temporary route reads to the primary, and verify replica apply workers before restarting maintenance jobs.',
+    relatedTicket: 'TCK-48213',
   },
   {
     id: 'KB-1003',
@@ -24,6 +30,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'Guide to resolving OAuth token refresh races and integration authorization errors in external webhook pipelines.',
     relevance: 0.93,
+    recommendation:
+      'Review token refresh timing, ensure the app is reusing valid credentials, and inspect webhook retry telemetry for repeated 401 responses.',
+    relatedTicket: 'TCK-48201',
   },
   {
     id: 'KB-1004',
@@ -31,6 +40,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'Workflow for validating billing entries, correcting extra charges, and issuing credits for invoice disputes.',
     relevance: 0.87,
+    recommendation:
+      'Confirm seat count changes, validate invoice adjustments, and issue a credit when duplicate charges are confirmed in billing history.',
+    relatedTicket: 'TCK-48196',
   },
   {
     id: 'KB-1005',
@@ -38,6 +50,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'How to detect file-size constraints, pagination issues, and analytics export failures for large customer reports.',
     relevance: 0.82,
+    recommendation:
+      'Validate export row limits, increase the page size safely, and confirm the file is not exceeding platform export thresholds.',
+    relatedTicket: 'TCK-48188',
   },
   {
     id: 'KB-1006',
@@ -45,6 +60,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'Operational guidance for quota checks, request throttling, and safe retry patterns when third-party APIs reject traffic.',
     relevance: 0.8,
+    recommendation:
+      'Review quota usage, apply exponential backoff, and verify whether the integration must request a higher rate limit after 429 spikes.',
+    relatedTicket: 'TCK-48217',
   },
   {
     id: 'KB-1007',
@@ -52,6 +70,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'Best practices for validating migrations, detecting data drift, and recovering safely from failed schema changes.',
     relevance: 0.79,
+    recommendation:
+      'Validate migration prechecks, confirm rollback readiness, and review data drift or row count changes before a production rollout.',
+    relatedTicket: 'TCK-48219',
   },
   {
     id: 'KB-1008',
@@ -59,6 +80,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'Troubleshooting steps for index performance issues, planner regressions, and latency spikes in customer-facing queries.',
     relevance: 0.77,
+    recommendation:
+      'Review query plans, validate the relevant index coverage, and compare execution timings before applying a planner workaround.',
+    relatedTicket: 'TCK-48175',
   },
   {
     id: 'KB-1009',
@@ -66,6 +90,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'Instructions for handling renamed workspaces, stale references, and permission sync issues that block access.',
     relevance: 0.72,
+    recommendation:
+      'Confirm permission propagation after the rename, verify stale workspace references, and re-sync the access policy if needed.',
+    relatedTicket: 'TCK-48162',
   },
   {
     id: 'KB-1010',
@@ -73,6 +100,9 @@ const FULL_KB_LIBRARY: KbArticle[] = [
     snippet:
       'Standard intake checklist for bug reports, error screenshots, user impact details, and rapid triage steps for support teams.',
     relevance: 0.7,
+    recommendation:
+      'Capture the UI steps, attach the screenshot, and log the user impact and affected environment before routing to the product team.',
+    relatedTicket: 'TCK-48209',
   },
 ]
 
@@ -83,6 +113,10 @@ export function KbReferences({ articles }: { articles: KbArticle[] }) {
 
   const libraryItems = viewAll ? FULL_KB_LIBRARY : articles
   const selectedArticle = libraryItems.find((article) => article.id === selectedId) ?? null
+  const selectedRecommendation =
+    selectedArticle?.recommendation ??
+    'Review the guidance in this KB article and apply the step-by-step troubleshooting flow before escalating to engineering.'
+  const relatedTicket = selectedArticle?.relatedTicket ?? 'Related ticket assist'
 
   const openKbLibrary = () => {
     setViewAll(true)
@@ -230,13 +264,22 @@ export function KbReferences({ articles }: { articles: KbArticle[] }) {
                   <h4 className="text-2xl font-semibold tracking-tight text-foreground">{selectedArticle.title}</h4>
                   <p className="mt-4 text-sm leading-7 text-muted-foreground">{selectedArticle.snippet}</p>
 
-                  <div className="mt-6 rounded-xl border border-border bg-muted/20 p-4">
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Recommended action
-                    </p>
-                    <p className="text-sm leading-7 text-foreground/90">
-                      Review the guidance in this KB article and apply the step-by-step troubleshooting flow before escalating to engineering.
-                    </p>
+                  <div className="mt-6 space-y-4">
+                    <div className="rounded-xl border border-border bg-muted/20 p-4">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Recommended action
+                      </p>
+                      <p className="text-sm leading-7 text-foreground/90">{selectedRecommendation}</p>
+                    </div>
+
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                        Similar ticket assist
+                      </p>
+                      <p className="text-sm leading-7 text-foreground/90">
+                        This KB matches <span className="font-semibold text-foreground">{relatedTicket}</span> and helps confirm the likely cause, next troubleshooting step, and the right escalation path.
+                      </p>
+                    </div>
                   </div>
                 </>
               ) : (

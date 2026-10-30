@@ -27,12 +27,26 @@ export function RoutingPanel({
         </span>
       }
     >
-      <div className="rounded-xl bg-gradient-to-br from-primary/10 to-primary/[0.03] px-3 py-2.5 ring-1 ring-primary/15 ring-inset">
-        <span className="inline-flex items-center gap-1 text-[10.5px] font-medium tracking-wide text-primary uppercase">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2 text-[10.5px] font-medium tracking-wide text-primary uppercase">
           <Sparkles className="size-3" aria-hidden="true" />
           AI Suggested
-        </span>
-        <p className="mt-0.5 text-[13px] font-semibold tracking-tight">{routing.destination}</p>
+        </div>
+        {overridden && (
+          <button
+            type="button"
+            onClick={() => onChange(routing.destination)}
+            disabled={disabled}
+            className="inline-flex items-center gap-1 rounded text-[11px] font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <RotateCcw className="size-3" aria-hidden="true" />
+            Use suggestion
+          </button>
+        )}
+      </div>
+
+      <div className="rounded-xl bg-gradient-to-br from-primary/10 to-primary/[0.03] px-3 py-2.5 ring-1 ring-primary/15 ring-inset">
+        <p className="text-[13px] font-semibold tracking-tight">{routing.destination}</p>
         <p className="mt-0.5 line-clamp-2 text-[11.5px] leading-relaxed text-muted-foreground">
           {routing.reason}
         </p>
@@ -43,17 +57,6 @@ export function RoutingPanel({
           <label htmlFor="routing-override" className="text-xs font-medium">
             Route to
           </label>
-          {overridden && (
-            <button
-              type="button"
-              onClick={() => onChange(routing.destination)}
-              disabled={disabled}
-              className="inline-flex items-center gap-1 rounded text-[11px] font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              <RotateCcw className="size-3" aria-hidden="true" />
-              Use suggestion
-            </button>
-          )}
         </div>
         <div className="relative mt-1.5">
           <select
